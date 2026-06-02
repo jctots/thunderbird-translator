@@ -1,6 +1,7 @@
 "use strict";
 
 const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+const DEFAULT_OPENAI_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "translategemma";
 const DEFAULT_SERVICE = "google";
 const DEFAULT_LIBRE_URL = "https://libretranslate.com";
@@ -57,12 +58,14 @@ const LANGUAGES = [
 
 const LANG_STORAGE_KEY = {
   ollama: "ollamaTargetLang",
+  openai: "openAiTargetLang",
   google: "googleTargetLang",
   libretranslate: "libreTargetLang",
 };
 
 const COMPOSE_LANG_KEY = {
   ollama: "ollamaComposeLang",
+  openai: "openAiComposeLang",
   google: "googleComposeLang",
   libretranslate: "libreComposeLang",
 };
@@ -73,6 +76,7 @@ async function updateReadButtonTitle() {
   const settings = await messenger.storage.local.get({
     service: DEFAULT_SERVICE,
     ollamaTargetLang: "en",
+    openAiTargetLang: "en",
     googleTargetLang: "en",
     libreTargetLang: "en",
   });
@@ -85,6 +89,7 @@ async function updateComposeButtonTitle() {
   const settings = await messenger.storage.local.get({
     service: DEFAULT_SERVICE,
     ollamaComposeLang: "en",
+    openAiComposeLang: "en",
     googleComposeLang: "en",
     libreComposeLang: "en",
   });
@@ -98,20 +103,28 @@ async function getSettings() {
     ollamaUrl: DEFAULT_OLLAMA_URL,
     model: DEFAULT_MODEL,
     detectionModel: "",
+    openAiUrl: DEFAULT_OPENAI_URL,
+    openAiModel: "",
+    openAiDetectionModel: "",
     service: DEFAULT_SERVICE,
     ollamaTargetLang: "en",
+    openAiTargetLang: "en",
     googleTargetLang: "en",
     libreTargetLang: "en",
     ollamaComposeLang: "en",
+    openAiComposeLang: "en",
     googleComposeLang: "en",
     libreComposeLang: "en",
     libreUrl: DEFAULT_LIBRE_URL,
     ollamaApiKey: "",
+    openAiApiKey: "",
     libreApiKey: "",
     autoTranslate: false,
     neverTranslateLangs: [],
     ollamaTranslatePrompt: "",
     ollamaDetectPrompt: "",
+    openAiTranslatePrompt: "",
+    openAiDetectPrompt: "",
   });
 }
 
@@ -259,28 +272,30 @@ messenger.runtime.onConnect.addListener((port) => {
       }
 
       // Exemption check: called after auto-translate completes.
-      // For Ollama: runs detection here (after translation) if neverTranslateLangs is non-empty.
+      // For LLM: runs detection here (after translation) if neverTranslateLangs is non-empty.
       if (message.command === "checkExemption") {
         try {
           const settings = await getSettings();
           const { neverTranslateLangs = [] } = settings;
           let detectedLang = tabId != null ? (detectedLangByTab.get(tabId) || null) : null;
 
-          // Ollama: no detected lang from translation response — run separate detection now
+          // LLM: no detected lang from translation response — run separate detection now
           if (!detectedLang && neverTranslateLangs.length > 0
-              && settings.service === "ollama" && tabId != null) {
+              && (settings.service === "ollama" || settings.service === "openai") && tabId != null) {
             try {
               const msg = await messenger.messageDisplay.getDisplayedMessage(tabId);
               if (msg) {
                 const full = await messenger.messages.getFull(msg.id);
                 const sample = extractPlainTextFromParts(full).trim().slice(0, 500);
                 if (sample) {
-                  detectedLang = await detectWithOllama(sample, settings);
+                  detectedLang = settings.service === "openai"
+                    ? await detectWithOpenAiCompatible(sample, settings)
+                    : await detectWithOllama(sample, settings);
                   detectedLangByTab.set(tabId, detectedLang);
                 }
               }
             } catch (e) {
-              console.warn("[Translator] Ollama detection failed in checkExemption:", e.message);
+              console.warn("[Translator] LLM detection failed in checkExemption:", e.message);
             }
           }
 
@@ -304,9 +319,15 @@ messenger.runtime.onConnect.addListener((port) => {
           const settings = await getSettings();
           const sourceLang = tabId != null ? (detectedLangByTab.get(tabId) || null) : null;
           const { translated } = await translateText(subject, settings, null, sourceLang);
-          const SERVICE_LABELS = { ollama: "Ollama", google: "Google Translate", libretranslate: "LibreTranslate" };
+          const SERVICE_LABELS = {
+            ollama: "Ollama",
+            openai: "OpenAI Compatible",
+            google: "Google Translate",
+            libretranslate: "LibreTranslate",
+          };
           const serviceLabel = SERVICE_LABELS[settings.service] || settings.service;
           const serviceUrl = settings.service === "ollama" ? settings.ollamaUrl
+            : settings.service === "openai" ? settings.openAiUrl
             : settings.service === "libretranslate" ? settings.libreUrl
             : null;
           port.postMessage({ id: message.id, success: true, translated, serviceLabel, serviceUrl });
@@ -383,16 +404,14 @@ messenger.runtime.onConnect.addListener((port) => {
 // --- Translation APIs ---
 // All return { translated: string, detectedLang: string|null }
 
-async function translateWithOllama(text, settings) {
-  const { ollamaUrl, model, targetLanguage, ollamaApiKey, ollamaTranslatePrompt, sourceLang } = settings;
+function buildPrompt(promptTemplate, text, targetLanguage, sourceLang) {
   const targetLangName = LANGUAGE_NAMES[targetLanguage] || targetLanguage;
   const targetLangCode = (targetLanguage || "").toUpperCase();
   const sourceLangName = sourceLang ? (LANGUAGE_NAMES[sourceLang] || sourceLang.toUpperCase()) : "the source language";
   const sourceLangCode = sourceLang ? sourceLang.toUpperCase() : "auto";
-
-  const promptTemplate = ollamaTranslatePrompt || DEFAULT_TRANSLATE_PROMPT;
   const safeText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const prompt = promptTemplate
+
+  return promptTemplate
     .replace(/{SOURCE_LANG}/g, sourceLangName)
     .replace(/{SOURCE_CODE}/g, sourceLangCode)
     .replace(/{TARGET_LANG}/g, targetLangName)
@@ -400,6 +419,39 @@ async function translateWithOllama(text, settings) {
     .replace(/{TEXT}/g, safeText)
     .replace(/{targetLanguage}/g, targetLangName)
     .replace(/{text}/g, safeText);
+}
+
+function getJsonErrorMessage(data, fallbackPrefix) {
+  if (!data || typeof data !== "object") return fallbackPrefix;
+  const error = data.error;
+  if (typeof error === "string") return `${fallbackPrefix}: ${error}`;
+  if (error && typeof error.message === "string") return `${fallbackPrefix}: ${error.message}`;
+  return fallbackPrefix;
+}
+
+function extractOpenAiText(data) {
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    const text = content
+      .filter(part => part?.type === "text" && typeof part.text === "string")
+      .map(part => part.text)
+      .join("")
+      .trim();
+    if (text) return text;
+  }
+  throw new Error("Invalid response from OpenAI-compatible API");
+}
+
+function normalizeOpenAiBaseUrl(openAiUrl) {
+  const base = (openAiUrl || DEFAULT_OPENAI_URL).replace(/\/+$/, "");
+  return /\/v1$/i.test(base) ? base : `${base}/v1`;
+}
+
+async function translateWithOllama(text, settings) {
+  const { ollamaUrl, model, targetLanguage, ollamaApiKey, ollamaTranslatePrompt, sourceLang } = settings;
+  const promptTemplate = ollamaTranslatePrompt || DEFAULT_TRANSLATE_PROMPT;
+  const prompt = buildPrompt(promptTemplate, text, targetLanguage, sourceLang);
 
   const headers = { "Content-Type": "application/json" };
   if (ollamaApiKey) headers["Authorization"] = `Bearer ${ollamaApiKey}`;
@@ -418,6 +470,45 @@ async function translateWithOllama(text, settings) {
 
   const translated = (await response.json()).response.trim();
   return { translated, detectedLang: null }; // Ollama detection is a separate call
+}
+
+async function translateWithOpenAiCompatible(text, settings) {
+  const {
+    openAiUrl,
+    openAiModel,
+    targetLanguage,
+    openAiApiKey,
+    openAiTranslatePrompt,
+    sourceLang,
+  } = settings;
+
+  const promptTemplate = openAiTranslatePrompt || DEFAULT_TRANSLATE_PROMPT;
+  const prompt = buildPrompt(promptTemplate, text, targetLanguage, sourceLang);
+  const headers = { "Content-Type": "application/json" };
+  if (openAiApiKey) headers["Authorization"] = `Bearer ${openAiApiKey}`;
+
+  const response = await fetch(`${normalizeOpenAiBaseUrl(openAiUrl)}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: openAiModel,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
+    }),
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(getJsonErrorMessage(data, `OpenAI-compatible API error: ${response.status} ${response.statusText}`));
+  }
+
+  return { translated: extractOpenAiText(data), detectedLang: null };
 }
 
 async function translateWithGoogle(text, targetLanguage) {
@@ -463,26 +554,39 @@ async function translateWithLibreTranslate(text, targetLanguage, libreUrl, libre
 }
 
 async function translateText(text, settings, targetLangOverride, sourceLang) {
-  const { service, ollamaTargetLang, googleTargetLang, libreTargetLang, libreUrl, libreApiKey } = settings;
+  const {
+    service,
+    ollamaTargetLang,
+    openAiTargetLang,
+    googleTargetLang,
+    libreTargetLang,
+    libreUrl,
+    libreApiKey,
+  } = settings;
   const targetLang = targetLangOverride
-    || { ollama: ollamaTargetLang, google: googleTargetLang, libretranslate: libreTargetLang }[service]
+    || {
+      ollama: ollamaTargetLang,
+      openai: openAiTargetLang,
+      google: googleTargetLang,
+      libretranslate: libreTargetLang,
+    }[service]
     || "en";
   switch (service) {
     case "ollama":         return translateWithOllama(text, { ...settings, targetLanguage: targetLang, sourceLang: sourceLang || null });
+    case "openai":         return translateWithOpenAiCompatible(text, { ...settings, targetLanguage: targetLang, sourceLang: sourceLang || null });
     case "google":         return translateWithGoogle(text, targetLang);
     case "libretranslate": return translateWithLibreTranslate(text, targetLang, libreUrl, libreApiKey);
     default: throw new Error(`Unknown service: ${service}`);
   }
 }
 
-// --- Ollama language detection (separate from translation) ---
+// --- LLM language detection (separate from translation) ---
 
 async function detectWithOllama(sample, settings) {
   const { ollamaUrl, ollamaApiKey, detectionModel, model, ollamaDetectPrompt } = settings;
   const detectModel = (detectionModel || "").trim() || model;
   const promptTemplate = ollamaDetectPrompt || DEFAULT_DETECT_PROMPT;
-  const safeSample = sample.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const prompt = promptTemplate.replace(/{text}/g, safeSample).replace(/{TEXT}/g, safeSample);
+  const prompt = buildPrompt(promptTemplate, sample, "", null);
 
   const headers = { "Content-Type": "application/json" };
   if (ollamaApiKey) headers["Authorization"] = `Bearer ${ollamaApiKey}`;
@@ -514,6 +618,58 @@ async function detectWithOllama(sample, settings) {
   throw new Error(`Could not parse language code from Ollama detection: "${raw}"`);
 }
 
+async function detectWithOpenAiCompatible(sample, settings) {
+  const {
+    openAiUrl,
+    openAiApiKey,
+    openAiDetectionModel,
+    openAiModel,
+    openAiDetectPrompt,
+  } = settings;
+  const detectModel = (openAiDetectionModel || "").trim() || openAiModel;
+  const promptTemplate = openAiDetectPrompt || DEFAULT_DETECT_PROMPT;
+  const prompt = buildPrompt(promptTemplate, sample, "", null);
+  const headers = { "Content-Type": "application/json" };
+  if (openAiApiKey) headers["Authorization"] = `Bearer ${openAiApiKey}`;
+
+  const response = await fetch(`${normalizeOpenAiBaseUrl(openAiUrl)}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: detectModel,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
+    }),
+  });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(getJsonErrorMessage(data, `OpenAI-compatible detection error: ${response.status} ${response.statusText}`));
+  }
+
+  const raw = extractOpenAiText(data).toLowerCase();
+
+  const strictMatch = raw.match(/^([a-z]{2,3})\b/);
+  if (strictMatch && LANGUAGE_NAMES[strictMatch[1]]) return strictMatch[1];
+
+  for (const [code, name] of Object.entries(LANGUAGE_NAMES)) {
+    if (raw.includes(name.toLowerCase())) return code;
+  }
+
+  const tokens = raw.match(/\b[a-z]{2,3}\b/g) || [];
+  for (const token of tokens) {
+    if (LANGUAGE_NAMES[token]) return token;
+  }
+
+  throw new Error(`Could not parse language code from OpenAI-compatible detection: "${raw}"`);
+}
+
 // Extract plain text from a MessagePart tree (messenger.messages.getFull response)
 function extractPlainTextFromParts(part) {
   if (!part) return "";
@@ -531,6 +687,32 @@ async function getInstalledModels(ollamaUrl) {
   const response = await fetch(`${ollamaUrl || DEFAULT_OLLAMA_URL}/api/tags`);
   if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
   return (await response.json()).models.map(m => m.name);
+}
+
+async function getOpenAiModels(openAiUrl, openAiApiKey) {
+  const headers = {};
+  if (openAiApiKey) headers["Authorization"] = `Bearer ${openAiApiKey}`;
+  const response = await fetch(`${normalizeOpenAiBaseUrl(openAiUrl)}/models`, { headers });
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(getJsonErrorMessage(data, `OpenAI-compatible API error: ${response.status} ${response.statusText}`));
+  }
+
+  const models = Array.isArray(data?.data)
+    ? data.data
+      .map(model => model?.id)
+      .filter(id => typeof id === "string" && id.length > 0)
+      .sort((a, b) => a.localeCompare(b))
+    : [];
+
+  return models;
 }
 
 // --- Context menu ---
@@ -626,20 +808,22 @@ browser.menus.onShown.addListener(async (info, tab) => {
     } else {
       let detectedLang = tabId != null ? detectedLangByTab.get(tabId) : null;
 
-      // For Ollama: run on-demand detection when cache is empty (e.g. manual translate)
-      if (!detectedLang && settings.service === "ollama" && tabId != null) {
+      // For LLM: run on-demand detection when cache is empty (e.g. manual translate)
+      if (!detectedLang && (settings.service === "ollama" || settings.service === "openai") && tabId != null) {
         try {
           const msg = await messenger.messageDisplay.getDisplayedMessage(tabId);
           if (msg) {
             const full = await messenger.messages.getFull(msg.id);
             const sample = extractPlainTextFromParts(full).trim().slice(0, 500);
             if (sample) {
-              detectedLang = await detectWithOllama(sample, settings);
+              detectedLang = settings.service === "openai"
+                ? await detectWithOpenAiCompatible(sample, settings)
+                : await detectWithOllama(sample, settings);
               detectedLangByTab.set(tabId, detectedLang);
             }
           }
         } catch (e) {
-          console.warn("[Translator] Ollama on-demand detection failed in onShown:", e.message);
+          console.warn("[Translator] LLM on-demand detection failed in onShown:", e.message);
         }
       }
 
@@ -719,7 +903,12 @@ messenger.messageDisplayAction.onClicked.addListener(async (tab) => {
       messenger.messageDisplayAction.setBadgeText({ tabId, text: "" });
     } else {
       const settings = await getSettings();
-      const targetLang = { ollama: settings.ollamaTargetLang, google: settings.googleTargetLang, libretranslate: settings.libreTargetLang }[settings.service] || "en";
+      const targetLang = {
+        ollama: settings.ollamaTargetLang,
+        openai: settings.openAiTargetLang,
+        google: settings.googleTargetLang,
+        libretranslate: settings.libreTargetLang,
+      }[settings.service] || "en";
       const result = await sendToTabPort(tabId, "doTranslate", { targetLang });
       if (result.success) {
         messenger.messageDisplayAction.setBadgeText({ tabId, text: "✓" });
@@ -767,12 +956,28 @@ messenger.runtime.onMessage.addListener(async (message) => {
   if (message.command === "getModels") {
     try {
       const settings = await getSettings();
-      return { success: true, models: await getInstalledModels(message.ollamaUrl || settings.ollamaUrl) };
+      const service = message.service || settings.service;
+      let models = [];
+      if (service === "openai") {
+        models = await getOpenAiModels(message.url || settings.openAiUrl, message.apiKey ?? settings.openAiApiKey)
+      } else {
+        models = await getInstalledModels(message.url || settings.ollamaUrl);
+      }
+      return {
+        success: true,
+        models: models,
+      };
     } catch (e) { return { success: false, error: e.message }; }
   }
   if (message.command === "testConnection") {
     try {
-      return { success: true, models: await getInstalledModels(message.ollamaUrl) };
+      let models = [];
+      if (message.service === "openai") {
+        models = await getOpenAiModels(message.url, message.apiKey);
+      } else {
+        models = await getInstalledModels(message.url);
+      }
+      return { success: true, models: models };
     } catch (e) { return { success: false, error: e.message }; }
   }
   if (message.command === "saveSettings") {
@@ -781,11 +986,17 @@ messenger.runtime.onMessage.addListener(async (message) => {
       model:                 message.model,
       detectionModel:        message.detectionModel,
       ollamaApiKey:          message.ollamaApiKey,
+      openAiUrl:             message.openAiUrl,
+      openAiModel:           message.openAiModel,
+      openAiDetectionModel:  message.openAiDetectionModel,
+      openAiApiKey:          message.openAiApiKey,
       libreUrl:              message.libreUrl,
       libreApiKey:           message.libreApiKey,
       service:               message.service,
       ollamaTranslatePrompt: message.ollamaTranslatePrompt,
       ollamaDetectPrompt:    message.ollamaDetectPrompt,
+      openAiTranslatePrompt: message.openAiTranslatePrompt,
+      openAiDetectPrompt:    message.openAiDetectPrompt,
     });
     updateReadButtonTitle();
     updateComposeButtonTitle();

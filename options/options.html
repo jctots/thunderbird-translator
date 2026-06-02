@@ -278,6 +278,66 @@
     </div>
   </div>
 
+  <!-- OpenAI Compatible -->
+  <div class="service-section">
+    <label class="service-header">
+      <input type="radio" name="service" value="openai" id="radio-openai">
+      OpenAI Compatible
+    </label>
+    <div class="service-config">
+      <div class="field">
+        <label for="openAiUrl" data-i18n="openAiUrl"></label>
+        <input type="text" id="openAiUrl" placeholder="https://api.openai.com/v1">
+        <p class="field-hint">e.g. <code>https://api.openai.com/v1</code> (official OpenAI API)<br>
+        or <code>http://localhost:45678/v1</code> (private LM Studio)</p>
+      </div>
+      <div class="field">
+        <label for="openAiModel">Translate Model</label>
+        <div class="input-row">
+          <select id="openAiModel">
+            <option value="" data-i18n="selectModel"></option>
+          </select>
+          <button id="refreshModelsOpenAi" title-i18n="refresh">&#x21bb;</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="openAiDetectionModel">Detection Model <span style="font-weight:normal;color:#666">(optional — defaults to Translate Model)</span></label>
+        <div class="input-row">
+          <select id="openAiDetectionModel">
+            <option value="">Same as Translate Model</option>
+          </select>
+          <button id="refreshDetectionModelsOpenAi" title-i18n="refresh">&#x21bb;</button>
+        </div>
+        <p class="field-hint">Used only for auto-translate language detection (Never/Always auto-translate). Leave blank to use the same model as translation.</p>
+      </div>
+<div class="field">
+        <label for="openAiApiKey">API Key <span style="font-weight:normal;color:#666">(optional)</span></label>
+        <div class="input-row">
+          <input type="text" id="openAiApiKey" placeholder="Leave blank if not required">
+          <button id="testConnectionOpenAi" data-i18n="testConnection"></button>
+        </div>
+        <div id="openAiTestStatus" class="status"></div>
+      </div>
+
+      <!-- Advanced: custom prompts -->
+      <details class="advanced-section">
+        <summary>Advanced: custom prompts</summary>
+        <div class="advanced-content">
+          <div class="field">
+            <label for="openAiTranslatePrompt">Translation prompt</label>
+            <textarea id="openAiTranslatePrompt" rows="7" placeholder="Leave blank to use the built-in default"></textarea>
+            <p class="field-hint">Variables: <code>{TEXT}</code> (email content), <code>{TARGET_LANG}</code> (e.g. "English"), <code>{TARGET_CODE}</code> (e.g. "EN"), <code>{SOURCE_LANG}</code> (source language name, if known), <code>{SOURCE_CODE}</code> (source code, if known). Clear field to restore default.</p>
+          </div>
+          <div class="field">
+            <label for="openAiDetectPrompt">Detection prompt</label>
+            <textarea id="openAiDetectPrompt" rows="6" placeholder="Leave blank to use the built-in default"></textarea>
+            <p class="field-hint">Used for language detection (Never/Always auto-translate). Variable: <code>{TEXT}</code> (sample of email content). Model must reply with a 2-letter ISO 639-1 code. Clear field to restore default.</p>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
   <!-- LibreTranslate -->
   <div class="service-section">
     <label class="service-header">

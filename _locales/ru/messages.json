@@ -23,6 +23,10 @@
     "message": "URL сервера Ollama",
     "description": "Метка для URL сервера Ollama"
   },
+  "openAiUrl": {
+    "message": "URL OpenAI-совместимого сервера",
+    "description": "Метка для URL OpenAI-совместимого сервера"
+  },
   "model": {
     "message": "Модель",
     "description": "Метка для выбора модели"
@@ -89,6 +93,10 @@
   },
   "urlRequired": {
     "message": "Введите URL сервера Ollama",
+    "description": "Сообщение проверки"
+  },
+  "serverUrlRequired": {
+    "message": "Введите URL сервера",
     "description": "Сообщение проверки"
   },
   "modelRequired": {

@@ -28,23 +28,33 @@ function translatePage() {
 }
 
 // --- Element refs ---
-const urlInput                = document.getElementById("ollamaUrl");
-const modelSelect             = document.getElementById("model");
-const detectionModelSelect    = document.getElementById("detectionModel");
-const ollamaApiKeyInput       = document.getElementById("ollamaApiKey");
-const libreUrlInput           = document.getElementById("libreUrl");
-const libreApiKeyInput        = document.getElementById("libreApiKey");
-const refreshBtn              = document.getElementById("refreshModels");
-const refreshDetectionBtn     = document.getElementById("refreshDetectionModels");
-const testBtn                 = document.getElementById("testConnection");
-const testLibreBtn            = document.getElementById("testLibreConnection");
-const saveBtn                 = document.getElementById("save");
-const statusDiv               = document.getElementById("status");
-const ollamaTestStatus        = document.getElementById("ollamaTestStatus");
-const libreTestStatus         = document.getElementById("libreTestStatus");
-const serviceRadios           = document.querySelectorAll("input[name='service']");
-const ollamaTranslatePromptTA = document.getElementById("ollamaTranslatePrompt");
-const ollamaDetectPromptTA    = document.getElementById("ollamaDetectPrompt");
+const urlInput                    = document.getElementById("ollamaUrl");
+const modelSelect                 = document.getElementById("model");
+const detectionModelSelect        = document.getElementById("detectionModel");
+const ollamaApiKeyInput           = document.getElementById("ollamaApiKey");
+const openAiUrlInput              = document.getElementById("openAiUrl");
+const openAiModelSelect           = document.getElementById("openAiModel");
+const openAiDetectionModelSelect  = document.getElementById("openAiDetectionModel");
+const openAiApiKeyInput           = document.getElementById("openAiApiKey");
+const libreUrlInput               = document.getElementById("libreUrl");
+const libreApiKeyInput            = document.getElementById("libreApiKey");
+const refreshBtn                  = document.getElementById("refreshModels");
+const refreshDetectionBtn         = document.getElementById("refreshDetectionModels");
+const refreshOpenAiBtn            = document.getElementById("refreshModelsOpenAi");
+const refreshOpenAiDetectionBtn   = document.getElementById("refreshDetectionModelsOpenAi");
+const testBtn                     = document.getElementById("testConnection");
+const testOpenAiBtn               = document.getElementById("testConnectionOpenAi");
+const testLibreBtn                = document.getElementById("testLibreConnection");
+const saveBtn                     = document.getElementById("save");
+const statusDiv                   = document.getElementById("status");
+const ollamaTestStatus            = document.getElementById("ollamaTestStatus");
+const openAiTestStatus            = document.getElementById("openAiTestStatus");
+const libreTestStatus             = document.getElementById("libreTestStatus");
+const serviceRadios               = document.querySelectorAll("input[name='service']");
+const ollamaTranslatePromptTA     = document.getElementById("ollamaTranslatePrompt");
+const ollamaDetectPromptTA        = document.getElementById("ollamaDetectPrompt");
+const openAiTranslatePromptTA     = document.getElementById("openAiTranslatePrompt");
+const openAiDetectPromptTA        = document.getElementById("openAiDetectPrompt");
 
 // --- Status ---
 function showStatus(messageKey, isError, replacements = {}) {
@@ -72,6 +82,10 @@ function setSelectedService(service) {
   }
 }
 
+function getUrlRequiredMessage() {
+  return browser.i18n.getMessage("serverUrlRequired") || "URL required";
+}
+
 // --- Load settings ---
 async function loadSettings() {
   const settings = await browser.storage.local.get({
@@ -81,26 +95,36 @@ async function loadSettings() {
     ollamaApiKey: "",
     libreUrl: "https://libretranslate.com",
     libreApiKey: "",
+    openAiUrl: "https://api.openai.com/v1",
+    openAiModel: "",
+    openAiDetectionModel: "",
+    openAiApiKey: "",
     service: "google",
     ollamaTranslatePrompt: "",
     ollamaDetectPrompt: "",
+    openAiTranslatePrompt: "",
+    openAiDetectPrompt: "",
   });
 
   urlInput.value = settings.ollamaUrl;
   ollamaApiKeyInput.value = settings.ollamaApiKey;
   libreUrlInput.value = settings.libreUrl;
   libreApiKeyInput.value = settings.libreApiKey;
+  openAiUrlInput.value = settings.openAiUrl;
+  openAiApiKeyInput.value = settings.openAiApiKey;
   ollamaTranslatePromptTA.value = settings.ollamaTranslatePrompt || DEFAULT_TRANSLATE_PROMPT;
-  ollamaDetectPromptTA.value    = settings.ollamaDetectPrompt    || DEFAULT_DETECT_PROMPT;
+  ollamaDetectPromptTA.value = settings.ollamaDetectPrompt || DEFAULT_DETECT_PROMPT;
+  openAiTranslatePromptTA.value = settings.openAiTranslatePrompt || DEFAULT_TRANSLATE_PROMPT;
+  openAiDetectPromptTA.value = settings.openAiDetectPrompt || DEFAULT_DETECT_PROMPT;
   setSelectedService(settings.service);
 
   await loadModels(settings.model);
   await loadDetectionModels(settings.detectionModel);
 }
 
-// --- Models ---
+// --- Ollama Models ---
 async function loadModels(selectedModel, ollamaUrl) {
-  const result = await browser.runtime.sendMessage({ command: "getModels", ollamaUrl });
+  const result = await browser.runtime.sendMessage({ command: "getModels", service: "ollama", url: ollamaUrl });
 
   modelSelect.innerHTML = "";
 
@@ -144,11 +168,9 @@ async function loadModels(selectedModel, ollamaUrl) {
   }
 }
 
-// --- Detection Models ---
 async function loadDetectionModels(selectedModel, ollamaUrl) {
-  const result = await browser.runtime.sendMessage({ command: "getModels", ollamaUrl });
+  const result = await browser.runtime.sendMessage({ command: "getModels", service: "ollama", url: ollamaUrl });
 
-  // Keep the "Same as Translate Model" blank option, then populate the rest
   detectionModelSelect.innerHTML = '<option value="">Same as Translate Model</option>';
 
   if (!result.success) {
@@ -179,6 +201,95 @@ async function loadDetectionModels(selectedModel, ollamaUrl) {
   }
 }
 
+// --- OpenAI-Compatible Models ---
+async function loadOpenAiModels(selectedModel, openAiUrl) {
+  const result = await browser.runtime.sendMessage({
+    command: "getModels",
+    service: "openai",
+    url: openAiUrl,
+    apiKey: openAiApiKeyInput.value.trim(),
+  });
+
+  openAiModelSelect.innerHTML = "";
+
+  if (!result.success) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = browser.i18n.getMessage("cannotLoadModels");
+    openAiModelSelect.appendChild(opt);
+    if (selectedModel) {
+      const saved = document.createElement("option");
+      saved.value = selectedModel;
+      saved.textContent = selectedModel + " " + browser.i18n.getMessage("saved");
+      saved.selected = true;
+      openAiModelSelect.appendChild(saved);
+    }
+    return;
+  }
+
+  if (result.models.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = browser.i18n.getMessage("noModelsFound");
+    openAiModelSelect.appendChild(opt);
+    return;
+  }
+
+  for (const name of result.models) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === selectedModel) opt.selected = true;
+    openAiModelSelect.appendChild(opt);
+  }
+
+  if (selectedModel && !result.models.includes(selectedModel)) {
+    const saved = document.createElement("option");
+    saved.value = selectedModel;
+    saved.textContent = selectedModel + " " + browser.i18n.getMessage("notFound");
+    saved.selected = true;
+    openAiModelSelect.prepend(saved);
+  }
+}
+
+async function loadOpenAiDetectionModels(selectedModel, openAiUrl) {
+  const result = await browser.runtime.sendMessage({
+    command: "getModels",
+    service: "openai",
+    url: openAiUrl,
+    apiKey: openAiApiKeyInput.value.trim(),
+  });
+
+  openAiDetectionModelSelect.innerHTML = '<option value="">Same as Translate Model</option>';
+
+  if (!result.success) {
+    if (selectedModel) {
+      const saved = document.createElement("option");
+      saved.value = selectedModel;
+      saved.textContent = selectedModel + " " + browser.i18n.getMessage("saved");
+      saved.selected = true;
+      openAiDetectionModelSelect.appendChild(saved);
+    }
+    return;
+  }
+
+  for (const name of result.models) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === selectedModel) opt.selected = true;
+    openAiDetectionModelSelect.appendChild(opt);
+  }
+
+  if (selectedModel && !result.models.includes(selectedModel) && selectedModel !== "") {
+    const saved = document.createElement("option");
+    saved.value = selectedModel;
+    saved.textContent = selectedModel + " " + browser.i18n.getMessage("notFound");
+    saved.selected = true;
+    openAiDetectionModelSelect.prepend(saved);
+  }
+}
+
 refreshBtn.addEventListener("click", async () => {
   clearStatus();
   await loadModels(modelSelect.value, urlInput.value.trim());
@@ -196,10 +307,25 @@ function showInlineStatus(el, text, isError) {
   el.className = "status " + (isError ? "error" : "success");
 }
 
+refreshOpenAiBtn.addEventListener("click", async () => {
+  clearStatus();
+  await loadOpenAiModels(openAiModelSelect.value, openAiUrlInput.value.trim());
+  showStatus("modelsRefreshed", false);
+});
+
+refreshOpenAiDetectionBtn.addEventListener("click", async () => {
+  clearStatus();
+  await loadOpenAiDetectionModels(openAiDetectionModelSelect.value, openAiUrlInput.value.trim());
+  showStatus("modelsRefreshed", false);
+});
+
 testBtn.addEventListener("click", async () => {
   const url = urlInput.value.trim();
-  if (!url) { showInlineStatus(ollamaTestStatus, browser.i18n.getMessage("urlRequired") || "URL required", true); return; }
-  const result = await browser.runtime.sendMessage({ command: "testConnection", ollamaUrl: url });
+  if (!url) {
+    showInlineStatus(ollamaTestStatus, getUrlRequiredMessage(), true);
+    return;
+  }
+  const result = await browser.runtime.sendMessage({ command: "testConnection", service: "ollama", url });
   if (result.success) {
     showInlineStatus(ollamaTestStatus, (browser.i18n.getMessage("connectionSuccess", [result.models.length]) || `Connected. ${result.models.length} models available.`), false);
     await loadModels(modelSelect.value, url);
@@ -209,9 +335,33 @@ testBtn.addEventListener("click", async () => {
   }
 });
 
+testOpenAiBtn.addEventListener("click", async () => {
+  const url = openAiUrlInput.value.trim();
+  if (!url) {
+    showInlineStatus(openAiTestStatus, getUrlRequiredMessage(), true);
+    return;
+  }
+  const result = await browser.runtime.sendMessage({
+    command: "testConnection",
+    service: "openai",
+    url,
+    apiKey: openAiApiKeyInput.value.trim(),
+  });
+  if (result.success) {
+    showInlineStatus(openAiTestStatus, (browser.i18n.getMessage("connectionSuccess", [result.models.length]) || `Connected. ${result.models.length} models available.`), false);
+    await loadOpenAiModels(openAiModelSelect.value, url);
+    await loadOpenAiDetectionModels(openAiDetectionModelSelect.value, url);
+  } else {
+    showInlineStatus(openAiTestStatus, (browser.i18n.getMessage("connectionFailed", [result.error]) || `Connection failed: ${result.error}`), true);
+  }
+});
+
 testLibreBtn.addEventListener("click", async () => {
   const url = libreUrlInput.value.trim();
-  if (!url) { showInlineStatus(libreTestStatus, browser.i18n.getMessage("urlRequired") || "URL required", true); return; }
+  if (!url) {
+    showInlineStatus(libreTestStatus, getUrlRequiredMessage(), true);
+    return;
+  }
   try {
     const base = url.replace(/\/+$/, "").replace(/\/translate$/, "");
     const apiKey = libreApiKeyInput.value.trim();
@@ -229,18 +379,33 @@ testLibreBtn.addEventListener("click", async () => {
 saveBtn.addEventListener("click", async () => {
   clearStatus();
 
-  const service             = getSelectedService();
-  const ollamaUrl           = urlInput.value.trim();
-  const model               = modelSelect.value;
-  const detectionModel      = detectionModelSelect.value;
-  const ollamaApiKey        = ollamaApiKeyInput.value.trim();
-  const libreUrl            = libreUrlInput.value.trim();
-  const libreApiKey         = libreApiKeyInput.value.trim();
+  const service = getSelectedService();
+  const ollamaUrl = urlInput.value.trim();
+  const model = modelSelect.value;
+  const detectionModel = detectionModelSelect.value;
+  const ollamaApiKey = ollamaApiKeyInput.value.trim();
+  const libreUrl = libreUrlInput.value.trim();
+  const libreApiKey = libreApiKeyInput.value.trim();
   const ollamaTranslatePrompt = ollamaTranslatePromptTA.value.trim();
-  const ollamaDetectPrompt    = ollamaDetectPromptTA.value.trim();
+  const ollamaDetectPrompt = ollamaDetectPromptTA.value.trim();
+  const openAiUrl = openAiUrlInput.value.trim();
+  const openAiModel = openAiModelSelect.value;
+  const openAiDetectionModel = openAiDetectionModelSelect.value;
+  const openAiApiKey = openAiApiKeyInput.value.trim();
+  const openAiTranslatePrompt = openAiTranslatePromptTA.value.trim();
+  const openAiDetectPrompt = openAiDetectPromptTA.value.trim();
 
   if (service === "ollama" && !ollamaUrl) {
     showStatus("urlRequired", true); return;
+  }
+  if (service === "ollama" && !model) {
+    showStatus("modelRequired", true); return;
+  }
+  if (service === "openai" && !openAiUrl) {
+    showStatus("serverUrlRequired", true); return;
+  }
+  if (service === "openai" && !openAiModel) {
+    showStatus("modelRequired", true); return;
   }
   if (service === "libretranslate" && !libreUrl) {
     showStatus("urlRequired", true); return;
@@ -249,8 +414,10 @@ saveBtn.addEventListener("click", async () => {
   await browser.runtime.sendMessage({
     command: "saveSettings",
     ollamaUrl, model, detectionModel, ollamaApiKey,
+    openAiUrl, openAiModel, openAiDetectionModel, openAiApiKey,
     libreUrl, libreApiKey, service,
     ollamaTranslatePrompt, ollamaDetectPrompt,
+    openAiTranslatePrompt, openAiDetectPrompt,
   });
 
   showStatus("settingsSaved", false);
