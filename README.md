@@ -1,5 +1,5 @@
 # Thunderbird Translator
-**Privacy-first email translation — Ollama (local/self-hosted), LibreTranslate (self-hosted or public), or Google Translate as a fallback**
+**Privacy-first email translation — Ollama, OpenAI-compatible APIs, LibreTranslate, or Google Translate as a fallback**
 
 > **Fork of [zoott28354/thunderbird-translator](https://github.com/zoott28354/thunderbird-translator)**
 > Extended with compose translation, auto-translate, local LibreTranslate support, and a native toolbar UI.
@@ -16,6 +16,7 @@
 
 - 🔒 **Privacy-first** — translate on your own machine or private network; your emails stay under your control
 - 🏠 **Ollama** — local or self-hosted; zero external connections, works fully offline
+- 🔌 **OpenAI-compatible API** — works with the official OpenAI API and compatible servers such as LM Studio and other `/v1/chat/completions` backends
 - 🖥️ **LibreTranslate** — self-hosted on your own server, or use a public instance
 - 🌐 **Google Translate** — zero-config fallback only; email text is sent to Google's servers. **Not suitable for private or sensitive emails** — use Ollama or LibreTranslate instead
 - 🤖 **Supports all Ollama models** — translategemma, Llama, Mistral, and more
@@ -32,6 +33,7 @@
 
 - **Thunderbird** 128 or later (ESR and non-ESR)
 - **Ollama** — must be installed and running (local machine or private server); see [setup](#ollama-1)
+- **OpenAI-compatible API** — optional; any reachable server implementing `/v1/chat/completions` and preferably `/v1/models`; see [setup](#openai-compatible-api)
 - **LibreTranslate** — must be reachable (local machine, private server, or public instance); see [setup](#libretranslate-1)
 
 ---
@@ -53,7 +55,7 @@
 
 ## ⚙️ Configuration
 
-> **Default service is Google Translate.** On a fresh install, email text is sent to Google's servers until you configure Ollama or LibreTranslate. If you are translating private or sensitive emails, set up one of those services first and switch the active service in Preferences.
+> **Default service is Google Translate.** On a fresh install, email text is sent to Google's servers until you configure Ollama, an OpenAI-compatible API, or LibreTranslate. If you are translating private or sensitive emails, set up one of those services first and switch the active service in Preferences.
 
 Open **Menu → Tools → Add-ons → Thunderbird Translator → Preferences**.
 
@@ -79,6 +81,32 @@ ollama pull translategemma
 ```
 
 **Private server** — see the [Ollama Docker documentation](https://hub.docker.com/r/ollama/ollama).
+
+### OpenAI-compatible API
+
+| Field | Default | Notes |
+|---|---|---|
+| Server URL | `https://api.openai.com/v1` | Can point to the official OpenAI API or any compatible private server |
+| Translate Model | — | Loaded from `/models`; required for translation |
+| Detection Model | *(same as Translate Model)* | Used only for auto-translate language detection |
+| API Key | *(blank)* | Required by OpenAI and many hosted compatible providers; often optional for local servers |
+
+**Test Connection** — calls `/models` on the configured server and lists available models.
+
+#### Setup
+
+**Official OpenAI API** — use `https://api.openai.com/v1`, provide an API key, then choose a chat-capable model returned by `/models`.
+
+**Private compatible server** — examples include LM Studio and other backends that expose OpenAI-style endpoints. Typical local URL example:
+
+```text
+http://localhost:1234/v1
+```
+
+For full support in the Options page, the server should implement:
+
+- `POST /v1/chat/completions` for translation and language detection
+- `GET /v1/models` for model discovery in the settings UI
 
 ### LibreTranslate
 
@@ -134,6 +162,8 @@ A **Translate** button appears in the compose toolbar.
 |---|---|
 | Ollama (local) | Nothing — 100% on your machine |
 | Ollama (self-hosted) | Nothing — stays on your private network |
+| OpenAI-compatible (local/self-hosted) | Nothing outside your machine or private network; email text is sent only to the configured server |
+| OpenAI-compatible (hosted provider) | Email text only, to the configured provider |
 | LibreTranslate (self-hosted) | Nothing — stays on your private network |
 | LibreTranslate (public) | Email text only, to the configured instance |
 | Google Translate | Email text only, to Google servers |
@@ -152,16 +182,16 @@ No tracking, no analytics. API keys and settings are stored locally in Thunderbi
 
 ## 🔍 Verifying privacy
 
-When using Ollama or LibreTranslate, you can confirm no email text leaves your network:
+When using Ollama, a local/self-hosted OpenAI-compatible server, or self-hosted LibreTranslate, you can confirm no email text leaves your network:
 
 1. In Thunderbird, right-click the toolbar and open **Developer Tools**, or go to **Tools → Developer Tools**
 2. Select the **Network** tab
 3. Translate an email
-4. Inspect the requests — you should see only traffic to your configured URL (e.g. `http://localhost:11434` or your homelab IP); nothing to `google.com` or any external service
+4. Inspect the requests — you should see only traffic to your configured URL (e.g. `http://localhost:11434`, `http://localhost:1234/v1`, or your homelab IP); nothing to `google.com` or any other external service
 
-The extension's full source is on GitHub. All translation calls are in [`background.js`](background.js) — three `fetch()` call sites: `translateWithOllama()`, `translateWithGoogle()`, and `translateWithLibreTranslate()`, routed by a single `switch` in `translateText()`. There are no background network calls, analytics, or telemetry.
+The extension's full source is on GitHub. All translation calls are in [`background.js`](background.js) — `translateWithOllama()`, `translateWithOpenAiCompatible()`, `translateWithGoogle()`, and `translateWithLibreTranslate()`, routed by a single `switch` in `translateText()`. There are no analytics or telemetry.
 
-> **Note:** this only applies when Ollama or LibreTranslate is the active service. Google Translate always contacts Google's servers — see the [Security](#-security) table.
+> **Note:** this only applies when a local/private service is the active service. Google Translate always contacts Google's servers, and hosted OpenAI-compatible providers receive the translated text you send to them — see the [Security](#-security) table.
 
 ---
 
@@ -177,6 +207,12 @@ Run `ollama pull translategemma` (or whichever model is selected in settings).
 - Verify the URL in settings matches your instance (e.g. `http://192.168.1.10:5000`)
 - If your instance requires an API key, enter it in the API Key field
 - Click **Test Connection** to confirm reachability before translating
+
+### OpenAI-compatible API: connection fails
+- Verify the base URL is correct and includes `/v1` if your server expects it
+- If you use the official OpenAI API or a hosted compatible provider, enter a valid API key
+- Confirm the server supports `GET /models`; the Options page uses it to populate model lists
+- For local servers, check whether they require a dummy API key or a different port
 
 ### Compose: "No text selected"
 Highlight text in the compose body *before* clicking the Translate button in the popup.

@@ -23,6 +23,10 @@
     "message": "Ollama Server URL",
     "description": "Label for Ollama server URL"
   },
+  "openAiUrl": {
+    "message": "OpenAI-Compatible Server URL",
+    "description": "Label for OpenAI-compatible server URL"
+  },
   "model": {
     "message": "Model",
     "description": "Label for model selection"
@@ -89,6 +93,10 @@
   },
   "urlRequired": {
     "message": "Enter the Ollama server URL",
+    "description": "Validation message"
+  },
+  "serverUrlRequired": {
+    "message": "Enter the server URL",
     "description": "Validation message"
   },
   "modelRequired": {
