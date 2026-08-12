@@ -171,12 +171,16 @@ Highlight text in the compose body *before* clicking the Translate button in the
 
 ## 📜 Changelog
 
+### v1.9.1 (fork — jctots)
+- **Preferences heading now shows the new name** — the options page title is a localized string (`appName`) held separately from the manifest name, and all seven locales still carried the old one after the v1.9.0 rename
+
 ### v1.9.0 (fork — jctots)
 - **Renamed to "Privacy Translator for Thunderbird"** — Mozilla's trademark policy allows "Thunderbird" in an add-on name only in the form `NAME for Thunderbird`
 - **Host access is now an optional permission** — `*://*/*` moved from `permissions` to `optional_permissions`, so nothing is granted at install. Thunderbird asks you to approve a single host the first time you press Save or Test Connection, and translation reports a clear error if access was declined
 - **`tabs` permission dropped** — the only tabs API in use is `tabs.onRemoved`, which does not require it; one less item on the install prompt
 - **`runtime.onMessage` listener made synchronous** — an async listener returns a Promise for every message including ones it does not handle, which can swallow responses belonging to other listeners
 - **XPI no longer ships `_docs/`** — README and listing screenshots were being packaged into the add-on, taking the download from 2.6 MB to 28 KB
+- **Ollama URLs with a trailing slash now work** — `https://example.com/` was producing `https://example.com//api/tags`; LibreTranslate already stripped it, the Ollama paths never did
 
 ### v1.8.3 (fork — jctots)
 - **Prompt injection mitigation** — Ollama translate and detect prompts now XML-escape email content before substitution; default prompts wrap the text in `<text>` tags to separate instruction from data
