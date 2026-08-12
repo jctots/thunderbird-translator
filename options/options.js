@@ -180,14 +180,23 @@ async function loadDetectionModels(selectedModel, ollamaUrl) {
 }
 
 refreshBtn.addEventListener("click", async () => {
+  const url = urlInput.value.trim();
+  // ensureHostPermission must come before any other await — see its definition.
+  if (!await ensureHostPermission(originPatternFromUrl(url))) {
+    showInlineStatus(ollamaTestStatus, permissionDeniedText(url), true); return;
+  }
   clearStatus();
-  await loadModels(modelSelect.value, urlInput.value.trim());
+  await loadModels(modelSelect.value, url);
   showStatus("modelsRefreshed", false);
 });
 
 refreshDetectionBtn.addEventListener("click", async () => {
+  const url = urlInput.value.trim();
+  if (!await ensureHostPermission(originPatternFromUrl(url))) {
+    showInlineStatus(ollamaTestStatus, permissionDeniedText(url), true); return;
+  }
   clearStatus();
-  await loadDetectionModels(detectionModelSelect.value, urlInput.value.trim());
+  await loadDetectionModels(detectionModelSelect.value, url);
   showStatus("modelsRefreshed", false);
 });
 
@@ -224,10 +233,20 @@ function originForService(service, ollamaUrl, libreUrl) {
 }
 
 // Returns true if the origin is granted, requesting it from the user if needed.
+//
+// permissions.request() is only allowed while the user gesture that triggered
+// the handler is still active. Awaiting anything before it — including
+// permissions.contains() — discards that gesture and the call throws. So this
+// must be the first await in any click handler, and it does not pre-check:
+// request() on an already-granted origin resolves true without prompting.
 async function ensureHostPermission(origin) {
   if (!origin) return false;
-  if (await browser.permissions.contains({ origins: [origin] })) return true;
-  return browser.permissions.request({ origins: [origin] });
+  try {
+    return await browser.permissions.request({ origins: [origin] });
+  } catch (e) {
+    console.error("[Translator] permissions.request failed:", e.message);
+    return false;
+  }
 }
 
 function permissionDeniedText(origin) {

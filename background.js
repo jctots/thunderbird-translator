@@ -387,6 +387,12 @@ messenger.runtime.onConnect.addListener((port) => {
 
 const GOOGLE_ORIGIN = "https://translate.google.com/*";
 
+// Ollama endpoints are built by string concatenation, so a trailing slash in the
+// configured URL produces "host//api/tags". LibreTranslate already strips it.
+function normalizeOllamaUrl(url) {
+  return (url || DEFAULT_OLLAMA_URL).replace(/\/+$/, "");
+}
+
 // Match patterns carry no port, so http://localhost:11434 becomes http://localhost/*
 function originPatternFromUrl(url) {
   try {
@@ -418,7 +424,8 @@ async function assertHostPermission(origin, label) {
 // All return { translated: string, detectedLang: string|null }
 
 async function translateWithOllama(text, settings) {
-  const { ollamaUrl, model, targetLanguage, ollamaApiKey, ollamaTranslatePrompt, sourceLang } = settings;
+  const { model, targetLanguage, ollamaApiKey, ollamaTranslatePrompt, sourceLang } = settings;
+  const ollamaUrl = normalizeOllamaUrl(settings.ollamaUrl);
   const targetLangName = LANGUAGE_NAMES[targetLanguage] || targetLanguage;
   const targetLangCode = (targetLanguage || "").toUpperCase();
   const sourceLangName = sourceLang ? (LANGUAGE_NAMES[sourceLang] || sourceLang.toUpperCase()) : "the source language";
@@ -513,7 +520,8 @@ async function translateText(text, settings, targetLangOverride, sourceLang) {
 // --- Ollama language detection (separate from translation) ---
 
 async function detectWithOllama(sample, settings) {
-  const { ollamaUrl, ollamaApiKey, detectionModel, model, ollamaDetectPrompt } = settings;
+  const { ollamaApiKey, detectionModel, model, ollamaDetectPrompt } = settings;
+  const ollamaUrl = normalizeOllamaUrl(settings.ollamaUrl);
   const detectModel = (detectionModel || "").trim() || model;
   const promptTemplate = ollamaDetectPrompt || DEFAULT_DETECT_PROMPT;
   const safeSample = sample.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -565,7 +573,7 @@ function extractPlainTextFromParts(part) {
 }
 
 async function getInstalledModels(ollamaUrl) {
-  const url = ollamaUrl || DEFAULT_OLLAMA_URL;
+  const url = normalizeOllamaUrl(ollamaUrl);
   await assertHostPermission(originPatternFromUrl(url), "Ollama");
   const response = await fetch(`${url}/api/tags`);
   if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
