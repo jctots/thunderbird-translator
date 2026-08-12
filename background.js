@@ -380,6 +380,40 @@ messenger.runtime.onConnect.addListener((port) => {
   }
 });
 
+// --- Host permissions ---
+// Host access is declared in manifest.json under optional_permissions, not
+// permissions, so nothing is granted at install time. The options page requests
+// the origin for the active service on save; everything here only checks.
+
+const GOOGLE_ORIGIN = "https://translate.google.com/*";
+
+// Match patterns carry no port, so http://localhost:11434 becomes http://localhost/*
+function originPatternFromUrl(url) {
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (protocol !== "http:" && protocol !== "https:") return null;
+    return `${protocol}//${hostname}/*`;
+  } catch {
+    return null;
+  }
+}
+
+function serviceOrigin(settings) {
+  switch (settings.service) {
+    case "ollama":         return originPatternFromUrl(settings.ollamaUrl);
+    case "libretranslate": return originPatternFromUrl(settings.libreUrl);
+    case "google":         return GOOGLE_ORIGIN;
+    default:               return null;
+  }
+}
+
+async function assertHostPermission(origin, label) {
+  if (!origin) throw new Error(`No valid ${label} server URL is configured. Check Preferences.`);
+  if (!await messenger.permissions.contains({ origins: [origin] })) {
+    throw new Error(`Access to ${origin} has not been granted. Open Preferences and press Save to grant it.`);
+  }
+}
+
 // --- Translation APIs ---
 // All return { translated: string, detectedLang: string|null }
 
@@ -467,6 +501,7 @@ async function translateText(text, settings, targetLangOverride, sourceLang) {
   const targetLang = targetLangOverride
     || { ollama: ollamaTargetLang, google: googleTargetLang, libretranslate: libreTargetLang }[service]
     || "en";
+  await assertHostPermission(serviceOrigin(settings), service);
   switch (service) {
     case "ollama":         return translateWithOllama(text, { ...settings, targetLanguage: targetLang, sourceLang: sourceLang || null });
     case "google":         return translateWithGoogle(text, targetLang);
@@ -483,6 +518,8 @@ async function detectWithOllama(sample, settings) {
   const promptTemplate = ollamaDetectPrompt || DEFAULT_DETECT_PROMPT;
   const safeSample = sample.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const prompt = promptTemplate.replace(/{text}/g, safeSample).replace(/{TEXT}/g, safeSample);
+
+  await assertHostPermission(originPatternFromUrl(ollamaUrl), "Ollama");
 
   const headers = { "Content-Type": "application/json" };
   if (ollamaApiKey) headers["Authorization"] = `Bearer ${ollamaApiKey}`;
@@ -528,7 +565,9 @@ function extractPlainTextFromParts(part) {
 }
 
 async function getInstalledModels(ollamaUrl) {
-  const response = await fetch(`${ollamaUrl || DEFAULT_OLLAMA_URL}/api/tags`);
+  const url = ollamaUrl || DEFAULT_OLLAMA_URL;
+  await assertHostPermission(originPatternFromUrl(url), "Ollama");
+  const response = await fetch(`${url}/api/tags`);
   if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
   return (await response.json()).models.map(m => m.name);
 }
@@ -763,32 +802,48 @@ messenger.composeAction.onClicked.addListener(async (tab) => {
 
 // --- Message handler (options page) ---
 
-messenger.runtime.onMessage.addListener(async (message) => {
-  if (message.command === "getModels") {
-    try {
-      const settings = await getSettings();
-      return { success: true, models: await getInstalledModels(message.ollamaUrl || settings.ollamaUrl) };
-    } catch (e) { return { success: false, error: e.message }; }
+// The listener itself must stay synchronous. An async listener returns a Promise
+// for *every* message, including ones it does not handle, so it claims messages
+// meant for other listeners and their responses can be dropped.
+// https://webextension-api.thunderbird.net/en/mv3/guides/runtimeMessaging.html
+
+async function handleGetModels(message) {
+  try {
+    const settings = await getSettings();
+    return { success: true, models: await getInstalledModels(message.ollamaUrl || settings.ollamaUrl) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+async function handleTestConnection(message) {
+  try {
+    return { success: true, models: await getInstalledModels(message.ollamaUrl) };
+  } catch (e) { return { success: false, error: e.message }; }
+}
+
+async function handleSaveSettings(message) {
+  await messenger.storage.local.set({
+    ollamaUrl:             message.ollamaUrl,
+    model:                 message.model,
+    detectionModel:        message.detectionModel,
+    ollamaApiKey:          message.ollamaApiKey,
+    libreUrl:              message.libreUrl,
+    libreApiKey:           message.libreApiKey,
+    service:               message.service,
+    ollamaTranslatePrompt: message.ollamaTranslatePrompt,
+    ollamaDetectPrompt:    message.ollamaDetectPrompt,
+  });
+  updateReadButtonTitle();
+  updateComposeButtonTitle();
+  return { success: true };
+}
+
+function onOptionsMessage(message) {
+  switch (message?.command) {
+    case "getModels":      return handleGetModels(message);
+    case "testConnection": return handleTestConnection(message);
+    case "saveSettings":   return handleSaveSettings(message);
   }
-  if (message.command === "testConnection") {
-    try {
-      return { success: true, models: await getInstalledModels(message.ollamaUrl) };
-    } catch (e) { return { success: false, error: e.message }; }
-  }
-  if (message.command === "saveSettings") {
-    await messenger.storage.local.set({
-      ollamaUrl:             message.ollamaUrl,
-      model:                 message.model,
-      detectionModel:        message.detectionModel,
-      ollamaApiKey:          message.ollamaApiKey,
-      libreUrl:              message.libreUrl,
-      libreApiKey:           message.libreApiKey,
-      service:               message.service,
-      ollamaTranslatePrompt: message.ollamaTranslatePrompt,
-      ollamaDetectPrompt:    message.ollamaDetectPrompt,
-    });
-    updateReadButtonTitle();
-    updateComposeButtonTitle();
-    return { success: true };
-  }
-});
+  // Not ours — return undefined so other listeners can respond.
+}
+
+messenger.runtime.onMessage.addListener(onOptionsMessage);

@@ -196,9 +196,52 @@ function showInlineStatus(el, text, isError) {
   el.className = "status " + (isError ? "error" : "success");
 }
 
+// --- Host permissions ---
+// Host access lives in optional_permissions, so nothing is granted at install.
+// permissions.request() only works inside a user input handler, which is why
+// every call below sits directly in a click handler rather than in load code.
+
+const GOOGLE_ORIGIN = "https://translate.google.com/*";
+
+// Match patterns carry no port, so http://localhost:11434 becomes http://localhost/*
+function originPatternFromUrl(url) {
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (protocol !== "http:" && protocol !== "https:") return null;
+    return `${protocol}//${hostname}/*`;
+  } catch {
+    return null;
+  }
+}
+
+function originForService(service, ollamaUrl, libreUrl) {
+  switch (service) {
+    case "ollama":         return originPatternFromUrl(ollamaUrl);
+    case "libretranslate": return originPatternFromUrl(libreUrl);
+    case "google":         return GOOGLE_ORIGIN;
+    default:               return null;
+  }
+}
+
+// Returns true if the origin is granted, requesting it from the user if needed.
+async function ensureHostPermission(origin) {
+  if (!origin) return false;
+  if (await browser.permissions.contains({ origins: [origin] })) return true;
+  return browser.permissions.request({ origins: [origin] });
+}
+
+function permissionDeniedText(origin) {
+  return browser.i18n.getMessage("permissionDenied", [origin])
+    || `Access to ${origin} was not granted. Translation cannot reach that server without it.`;
+}
+
 testBtn.addEventListener("click", async () => {
   const url = urlInput.value.trim();
   if (!url) { showInlineStatus(ollamaTestStatus, browser.i18n.getMessage("urlRequired") || "URL required", true); return; }
+  const origin = originPatternFromUrl(url);
+  if (!await ensureHostPermission(origin)) {
+    showInlineStatus(ollamaTestStatus, permissionDeniedText(origin || url), true); return;
+  }
   const result = await browser.runtime.sendMessage({ command: "testConnection", ollamaUrl: url });
   if (result.success) {
     showInlineStatus(ollamaTestStatus, (browser.i18n.getMessage("connectionSuccess", [result.models.length]) || `Connected. ${result.models.length} models available.`), false);
@@ -212,6 +255,10 @@ testBtn.addEventListener("click", async () => {
 testLibreBtn.addEventListener("click", async () => {
   const url = libreUrlInput.value.trim();
   if (!url) { showInlineStatus(libreTestStatus, browser.i18n.getMessage("urlRequired") || "URL required", true); return; }
+  const origin = originPatternFromUrl(url);
+  if (!await ensureHostPermission(origin)) {
+    showInlineStatus(libreTestStatus, permissionDeniedText(origin || url), true); return;
+  }
   try {
     const base = url.replace(/\/+$/, "").replace(/\/translate$/, "");
     const apiKey = libreApiKeyInput.value.trim();
@@ -244,6 +291,12 @@ saveBtn.addEventListener("click", async () => {
   }
   if (service === "libretranslate" && !libreUrl) {
     showStatus("urlRequired", true); return;
+  }
+
+  // Grant the active service its host access now, while we still have the click.
+  const origin = originForService(service, ollamaUrl, libreUrl);
+  if (!await ensureHostPermission(origin)) {
+    showInlineStatus(statusDiv, permissionDeniedText(origin || service), true); return;
   }
 
   await browser.runtime.sendMessage({

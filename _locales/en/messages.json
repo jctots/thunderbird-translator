@@ -95,6 +95,16 @@
     "message": "Select a model",
     "description": "Validation message"
   },
+  "permissionDenied": {
+    "message": "Access to $ORIGIN$ was not granted. Translation cannot reach that server without it.",
+    "description": "Shown when the user declines the host permission request",
+    "placeholders": {
+      "origin": {
+        "content": "$1",
+        "example": "http://localhost/*"
+      }
+    }
+  },
   "settingsSaved": {
     "message": "Settings saved",
     "description": "Success message"

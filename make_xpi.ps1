@@ -34,15 +34,8 @@ foreach ($rel in $includes) {
     }
 }
 
-# Add all _docs files (screenshots)
-$docsPath = Join-Path $src '_docs'
-if (Test-Path $docsPath) {
-    Get-ChildItem -Path $docsPath -Recurse -File | ForEach-Object {
-        $rel = $_.FullName.Substring($src.Length + 1).Replace('\','/')
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $rel, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
-        Write-Host "Added: $rel"
-    }
-}
+# _docs/ holds README and ATN listing screenshots only. It is deliberately NOT
+# packaged: shipping it bloats the XPI and was rejected in ATN review of 1.8.3.
 
 # Add all _locales files
 Get-ChildItem -Path (Join-Path $src '_locales') -Recurse -File | ForEach-Object {

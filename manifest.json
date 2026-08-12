@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
-  "name": "Thunderbird Translator",
-  "version": "1.8.3",
+  "name": "Privacy Translator for Thunderbird",
+  "version": "1.9.0",
   "description": "Translate emails using Ollama, Google Translate or LibreTranslate",
   "author": "jctots (fork of zoott28354)",
   "default_locale": "en",
@@ -18,8 +18,10 @@
     "messagesModify",
     "compose",
     "storage",
-    "tabs",
-    "menus",
+    "menus"
+  ],
+
+  "optional_permissions": [
     "*://*/*"
   ],
 

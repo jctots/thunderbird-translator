@@ -1,16 +1,12 @@
-# Thunderbird Translator
+# Privacy Translator for Thunderbird
 **Privacy-first email translation — Ollama (local/self-hosted), LibreTranslate (self-hosted or public), or Google Translate as a fallback**
 
 > **Fork of [zoott28354/thunderbird-translator](https://github.com/zoott28354/thunderbird-translator)**
 > Extended with compose translation, auto-translate, local LibreTranslate support, and a native toolbar UI.
 
----
-
 <p align="center">
-  <img src="_docs/demo.gif" alt="Thunderbird Translator demo">
+  <img src="_docs/demo.gif" alt="Privacy Translator for Thunderbird demo">
 </p>
-
----
 
 ## ✨ Features
 
@@ -26,15 +22,11 @@
 - 💾 **Persistent settings** — service and language remembered per-service
 - 🌐 **Multilingual interface** — 7 UI languages: 🇬🇧 English, 🇮🇹 Italian, 🇩🇪 German, 🇫🇷 French, 🇪🇸 Spanish, 🇵🇹 Portuguese, 🇷🇺 Russian
 
----
-
 ## 📋 Requirements
 
 - **Thunderbird** 128 or later (ESR and non-ESR)
 - **Ollama** — must be installed and running (local machine or private server); see [setup](#ollama-1)
 - **LibreTranslate** — must be reachable (local machine, private server, or public instance); see [setup](#libretranslate-1)
-
----
 
 ## 📦 Installation
 
@@ -49,13 +41,11 @@
 2. Click **Load Temporary Add-on…**
 3. Select `manifest.json` from the project folder
 
----
-
 ## ⚙️ Configuration
 
 > **Default service is Google Translate.** On a fresh install, email text is sent to Google's servers until you configure Ollama or LibreTranslate. If you are translating private or sensitive emails, set up one of those services first and switch the active service in Preferences.
 
-Open **Menu → Tools → Add-ons → Thunderbird Translator → Preferences**.
+Open **Menu → Tools → Add-ons → Privacy Translator for Thunderbird → Preferences**.
 
 <p align="center">
   <img src="_docs/options.png" alt="Options page">
@@ -95,8 +85,6 @@ ollama pull translategemma
 
 **Public instances** — use `https://libretranslate.com` or any other public instance. Some require an API key.
 
----
-
 ## 🎯 How to Use
 
 ### Reading emails
@@ -126,8 +114,6 @@ A **Translate** button appears in the compose toolbar.
 3. **Right-click** the Translate button to set the target language if needed
 4. **Click** the Translate button — selected text is replaced in place (undo works)
 
----
-
 ## 🔒 Security
 
 | Mode | Data sent externally |
@@ -141,14 +127,18 @@ A **Translate** button appears in the compose toolbar.
 No tracking, no analytics. API keys and settings are stored locally in Thunderbird's own storage — never transmitted.
 
 ### Permissions
+
+Granted at install:
+
 - `messagesRead` — reads email content for translation
 - `messagesModify` — replaces displayed text with translation
 - `compose` — injects translation script into compose windows
 - `storage` — saves your settings locally
-- `tabs` — identifies the active window for popup communication
-- `*://*/*` — required because Ollama and LibreTranslate URLs are user-configurable; the extension only contacts the URLs you set in preferences
+- `menus` — adds the right-click language and auto-translate menu
 
----
+Requested on demand, never at install:
+
+- `*://*/*` — declared as an *optional* permission because Ollama and LibreTranslate URLs are user-configurable and cannot be known in advance. Thunderbird asks you to approve a single host the first time you press **Save** or **Test Connection** in Preferences, and the extension only ever contacts the server you configured. Decline it and translation for that service simply will not run.
 
 ## 🔍 Verifying privacy
 
@@ -162,8 +152,6 @@ When using Ollama or LibreTranslate, you can confirm no email text leaves your n
 The extension's full source is on GitHub. All translation calls are in [`background.js`](background.js) — three `fetch()` call sites: `translateWithOllama()`, `translateWithGoogle()`, and `translateWithLibreTranslate()`, routed by a single `switch` in `translateText()`. There are no background network calls, analytics, or telemetry.
 
 > **Note:** this only applies when Ollama or LibreTranslate is the active service. Google Translate always contacts Google's servers — see the [Security](#-security) table.
-
----
 
 ## 🚨 Troubleshooting
 
@@ -181,9 +169,14 @@ Run `ollama pull translategemma` (or whichever model is selected in settings).
 ### Compose: "No text selected"
 Highlight text in the compose body *before* clicking the Translate button in the popup.
 
----
-
 ## 📜 Changelog
+
+### v1.9.0 (fork — jctots)
+- **Renamed to "Privacy Translator for Thunderbird"** — Mozilla's trademark policy allows "Thunderbird" in an add-on name only in the form `NAME for Thunderbird`
+- **Host access is now an optional permission** — `*://*/*` moved from `permissions` to `optional_permissions`, so nothing is granted at install. Thunderbird asks you to approve a single host the first time you press Save or Test Connection, and translation reports a clear error if access was declined
+- **`tabs` permission dropped** — the only tabs API in use is `tabs.onRemoved`, which does not require it; one less item on the install prompt
+- **`runtime.onMessage` listener made synchronous** — an async listener returns a Promise for every message including ones it does not handle, which can swallow responses belonging to other listeners
+- **XPI no longer ships `_docs/`** — README and listing screenshots were being packaged into the add-on, taking the download from 2.6 MB to 28 KB
 
 ### v1.8.3 (fork — jctots)
 - **Prompt injection mitigation** — Ollama translate and detect prompts now XML-escape email content before substitution; default prompts wrap the text in `<text>` tags to separate instruction from data
@@ -235,8 +228,6 @@ Highlight text in the compose body *before* clicking the Translate button in the
 
 ### v1.0.0 (zoott28354)
 - Initial release: Ollama, Google Translate, LibreTranslate; context menu UI; 7 UI locales
-
----
 
 ## 📝 License
 
