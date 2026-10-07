@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Privacy Translator for Thunderbird",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "Translate emails using Ollama, Google Translate or LibreTranslate",
   "author": "jctots (fork of zoott28354)",
   "default_locale": "en",
@@ -28,27 +28,17 @@
   "message_display_action": {
     "default_title": "Translate",
     "default_icon": {
-      "48": "icons/translate-dark.svg",
-      "96": "icons/translate-dark.svg"
-    },
-    "theme_icons": [{
-      "light": "icons/translate-light.svg",
-      "dark":  "icons/translate-dark.svg",
-      "size": 48
-    }]
+      "48": "icons/translate.svg",
+      "96": "icons/translate.svg"
+    }
   },
 
   "compose_action": {
     "default_title": "Translate",
     "default_icon": {
-      "48": "icons/translate-dark.svg",
-      "96": "icons/translate-dark.svg"
-    },
-    "theme_icons": [{
-      "light": "icons/translate-light.svg",
-      "dark":  "icons/translate-dark.svg",
-      "size": 48
-    }]
+      "48": "icons/translate.svg",
+      "96": "icons/translate.svg"
+    }
   },
 
   "background": {
@@ -60,7 +50,7 @@
   },
 
   "icons": {
-    "48": "icons/translate-dark.svg",
-    "96": "icons/translate-dark.svg"
+    "48": "icons/translate.svg",
+    "96": "icons/translate.svg"
   }
 }

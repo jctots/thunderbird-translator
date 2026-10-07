@@ -4,6 +4,15 @@
 > **Fork of [zoott28354/thunderbird-translator](https://github.com/zoott28354/thunderbird-translator)**
 > Extended with compose translation, auto-translate, local LibreTranslate support, and a native toolbar UI.
 
+> [!NOTE]
+> **Now available on Thunderbird Add-ons.** Install it from the
+> [official listing](https://addons.thunderbird.net/addon/thunderbird-translator-jctots/)
+> to get automatic updates.
+
+<p align="center">
+  <a href="https://addons.thunderbird.net/addon/thunderbird-translator-jctots/"><img src="https://img.shields.io/badge/Get%20it%20on-Thunderbird%20Add--ons-0a84ff" alt="Get it on Thunderbird Add-ons"></a>
+</p>
+
 <p align="center">
   <img src="_docs/demo.gif" alt="Privacy Translator for Thunderbird demo">
 </p>
@@ -30,6 +39,12 @@
 
 ## 📦 Installation
 
+### From Thunderbird Add-ons (recommended)
+1. Open the [listing on Thunderbird Add-ons](https://addons.thunderbird.net/addon/thunderbird-translator-jctots/) and click **Add to Thunderbird**, or in Thunderbird use **Menu → Tools → Add-ons** and search for "Privacy Translator"
+2. Confirm the install
+
+Installing from the listing keeps the add-on up to date automatically.
+
 ### From XPI file
 1. Download `thunderbird-translator.xpi` from [Releases](../../releases)
 2. In Thunderbird: **Menu → Tools → Add-ons**
@@ -43,7 +58,7 @@
 
 ## ⚙️ Configuration
 
-> **Default service is Google Translate.** On a fresh install, email text is sent to Google's servers until you configure Ollama or LibreTranslate. If you are translating private or sensitive emails, set up one of those services first and switch the active service in Preferences.
+> **Translation is disabled until you choose a service.** On a fresh install the add-on sends nothing anywhere. Clicking the Translate button opens Preferences, where you pick Ollama, LibreTranslate or Google Translate (which sends email text to Google's servers). If you are translating private or sensitive emails, choose Ollama or LibreTranslate.
 
 Open **Menu → Tools → Add-ons → Privacy Translator for Thunderbird → Preferences**.
 
@@ -170,6 +185,11 @@ Run `ollama pull translategemma` (or whichever model is selected in settings).
 Highlight text in the compose body *before* clicking the Translate button in the popup.
 
 ## 📜 Changelog
+
+### v1.9.2 (fork — jctots)
+- **Disabled by default** — a fresh install has no translation service selected and sends nothing anywhere; a fourth **Disabled** option in Preferences makes this explicit. Installs that never saved a service keep Google Translate on upgrade
+- **Unconfigured button opens Preferences** — clicking Translate with no service, no usable server URL or no granted host access opens the options page instead of showing only a red "!"
+- **Toolbar icon follows the color scheme** — one SVG that is white under a dark color scheme and black otherwise, replacing the per-theme `theme_icons` pair that left the icon black on dark themes
 
 ### v1.9.1 (fork — jctots)
 - **Preferences heading now shows the new name** — the options page title is a localized string (`appName`) held separately from the manifest name, and all seven locales still carried the old one after the v1.9.0 rename

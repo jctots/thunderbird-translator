@@ -361,8 +361,8 @@
   }
 
   // Auto-translate on load if setting is enabled
-  browser.storage.local.get({ autoTranslate: false }).then(async (s) => {
-    if (!s.autoTranslate) return;
+  browser.storage.local.get({ autoTranslate: false, service: "disabled" }).then(async (s) => {
+    if (!s.autoTranslate || s.service === "disabled") return;
 
     port.postMessage({ command: "setBadge" });
     const result = await startTranslation();

@@ -2,7 +2,7 @@
 
 const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 const DEFAULT_MODEL = "translategemma";
-const DEFAULT_SERVICE = "google";
+const DEFAULT_SERVICE = "disabled";
 const DEFAULT_LIBRE_URL = "https://libretranslate.com";
 
 const DEFAULT_TRANSLATE_PROMPT =
@@ -420,6 +420,26 @@ async function assertHostPermission(origin, label) {
   }
 }
 
+// True when the active service cannot run yet: none chosen, no usable server
+// URL, or host access not granted. Callers send the user to Preferences.
+async function serviceNeedsSetup(settings) {
+  const origin = serviceOrigin(settings);
+  if (!origin) return true;
+  return !(await messenger.permissions.contains({ origins: [origin] }));
+}
+
+// Before "disabled" became the default, an unset service meant Google. Keep
+// that for people who never opened Preferences instead of silently disabling them.
+messenger.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== "update") return;
+  const { service } = await messenger.storage.local.get("service");
+  if (service === undefined) {
+    await messenger.storage.local.set({ service: "google" });
+    updateReadButtonTitle();
+    updateComposeButtonTitle();
+  }
+});
+
 // --- Translation APIs ---
 // All return { translated: string, detectedLang: string|null }
 
@@ -508,6 +528,9 @@ async function translateText(text, settings, targetLangOverride, sourceLang) {
   const targetLang = targetLangOverride
     || { ollama: ollamaTargetLang, google: googleTargetLang, libretranslate: libreTargetLang }[service]
     || "en";
+  if (!["ollama", "google", "libretranslate"].includes(service)) {
+    throw new Error("No translation service is selected. Open Preferences and choose one.");
+  }
   await assertHostPermission(serviceOrigin(settings), service);
   switch (service) {
     case "ollama":         return translateWithOllama(text, { ...settings, targetLanguage: targetLang, sourceLang: sourceLang || null });
@@ -757,6 +780,10 @@ browser.menus.onClicked.addListener(async (info, tab) => {
 
 messenger.messageDisplayAction.onClicked.addListener(async (tab) => {
   const tabId = tab.id;
+  if (await serviceNeedsSetup(await getSettings())) {
+    await messenger.runtime.openOptionsPage();
+    return;
+  }
   messenger.messageDisplayAction.setBadgeText({ tabId, text: "..." });
   messenger.messageDisplayAction.setBadgeBackgroundColor({ tabId, color: "#f90" });
   try {
@@ -789,6 +816,10 @@ messenger.messageDisplayAction.onClicked.addListener(async (tab) => {
 messenger.composeAction.onClicked.addListener(async (tab) => {
   const tabId    = tab.id;
   const windowId = tab.windowId;
+  if (await serviceNeedsSetup(await getSettings())) {
+    await messenger.runtime.openOptionsPage();
+    return;
+  }
   messenger.composeAction.setBadgeText({ tabId, text: "..." });
   messenger.composeAction.setBadgeBackgroundColor({ tabId, color: "#f90" });
   try {

@@ -20,8 +20,7 @@ $includes = @(
     'content\composer.js',
     'options\options.html',
     'options\options.js',
-    'icons\translate-dark.svg',
-    'icons\translate-light.svg'
+    'icons\translate.svg'
 )
 
 foreach ($rel in $includes) {

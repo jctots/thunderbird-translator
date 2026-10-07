@@ -63,7 +63,7 @@ function getSelectedService() {
   for (const r of serviceRadios) {
     if (r.checked) return r.value;
   }
-  return "google";
+  return "disabled";
 }
 
 function setSelectedService(service) {
@@ -81,7 +81,7 @@ async function loadSettings() {
     ollamaApiKey: "",
     libreUrl: "https://libretranslate.com",
     libreApiKey: "",
-    service: "google",
+    service: "disabled",
     ollamaTranslatePrompt: "",
     ollamaDetectPrompt: "",
   });
@@ -313,9 +313,12 @@ saveBtn.addEventListener("click", async () => {
   }
 
   // Grant the active service its host access now, while we still have the click.
-  const origin = originForService(service, ollamaUrl, libreUrl);
-  if (!await ensureHostPermission(origin)) {
-    showInlineStatus(statusDiv, permissionDeniedText(origin || service), true); return;
+  // "Disabled" talks to no server, so it needs none.
+  if (service !== "disabled") {
+    const origin = originForService(service, ollamaUrl, libreUrl);
+    if (!await ensureHostPermission(origin)) {
+      showInlineStatus(statusDiv, permissionDeniedText(origin || service), true); return;
+    }
   }
 
   await browser.runtime.sendMessage({
