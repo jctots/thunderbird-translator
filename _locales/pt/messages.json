@@ -138,5 +138,15 @@
   "subjectLabel": {
     "message": "Assunto:",
     "description": "Rótulo exibido antes do assunto traduzido do e-mail"
+  },
+  "permissionDenied": {
+    "message": "O acesso a $ORIGIN$ não foi concedido. Sem ele, a tradução não consegue alcançar esse servidor.",
+    "description": "Shown when the user declines the host permission request",
+    "placeholders": {
+      "origin": {
+        "content": "$1",
+        "example": "http://localhost/*"
+      }
+    }
   }
 }

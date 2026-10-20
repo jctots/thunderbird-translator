@@ -138,5 +138,15 @@
   "subjectLabel": {
     "message": "Asunto:",
     "description": "Etiqueta mostrada antes del asunto del correo traducido"
+  },
+  "permissionDenied": {
+    "message": "No se concedió acceso a $1. Sin él, la traducción no puede conectarse a ese servidor.",
+    "description": "Shown when the user declines the host permission request",
+    "placeholders": {
+      "origin": {
+        "content": "$1",
+        "example": "http://localhost/*"
+      }
+    }
   }
 }

@@ -68,6 +68,7 @@
     }
 
     input[type="text"],
+    input[type="password"],
     select,
     textarea {
       width: 100%;
@@ -253,7 +254,7 @@
 <div class="field">
         <label for="ollamaApiKey">API Key <span style="font-weight:normal;color:#666">(optional)</span></label>
         <div class="input-row">
-          <input type="text" id="ollamaApiKey" placeholder="Leave blank if not required">
+          <input type="password" id="ollamaApiKey" autocomplete="off" placeholder="Leave blank if not required">
           <button id="testConnection" data-i18n="testConnection"></button>
         </div>
         <div id="ollamaTestStatus" class="status"></div>
@@ -295,7 +296,7 @@
       <div class="field">
         <label for="libreApiKey">API Key <span style="font-weight:normal;color:#666">(optional)</span></label>
         <div class="input-row">
-          <input type="text" id="libreApiKey" placeholder="Leave blank if not required">
+          <input type="password" id="libreApiKey" autocomplete="off" placeholder="Leave blank if not required">
           <button id="testLibreConnection">Test Connection</button>
         </div>
         <div id="libreTestStatus" class="status"></div>
@@ -324,6 +325,13 @@
       <p class="field-hint">No translation service is selected, so nothing is translated and no message content leaves Thunderbird. Choose Ollama, LibreTranslate or Google Translate above, then press Save.</p>
     </div>
   </div>
+
+  <details class="advanced-section" id="privacy-details">
+    <summary>Privacy: what is sent where</summary>
+    <div class="advanced-content">
+      <p class="field-hint">Nothing is sent until you choose a service and translate. The text of the message you translate (and its subject) goes only to the service selected above: Ollama or LibreTranslate at the URL you entered, or Google Translate (translate.google.com). With auto-translate on, that includes every message you open. The public LibreTranslate server (libretranslate.com) and Google receive the text and your IP address; their own policies apply. The add-on has no analytics, telemetry or servers of its own, and keeps your settings and API keys in Thunderbird's local storage only. Full policy: <a href="https://github.com/jctots/thunderbird-translator/blob/main/PRIVACY.md">PRIVACY.md</a>.</p>
+    </div>
+  </details>
 
   <div class="button-row">
     <button id="save" class="primary" data-i18n="save"></button>

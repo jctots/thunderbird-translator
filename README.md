@@ -14,6 +14,10 @@
 </p>
 
 <p align="center">
+  <a href="CONTRIBUTING.md">Contribute</a> · <a href="PRIVACY.md">Privacy policy</a> · <a href="https://github.com/jctots/thunderbird-translator/issues/new/choose">Report a bug</a>
+</p>
+
+<p align="center">
   <img src="_docs/demo.gif" alt="Privacy Translator for Thunderbird demo">
 </p>
 
@@ -139,7 +143,7 @@ A **Translate** button appears in the compose toolbar.
 | LibreTranslate (public) | Email text only, to the configured instance |
 | Google Translate | Email text only, to Google servers |
 
-No tracking, no analytics. API keys and settings are stored locally in Thunderbird's own storage — never transmitted.
+No tracking, no analytics. API keys and settings are stored locally in Thunderbird's own storage — never transmitted. Full details: [PRIVACY.md](PRIVACY.md).
 
 ### Permissions
 
@@ -168,6 +172,10 @@ The extension's full source is on GitHub. All translation calls are in [`backgro
 
 > **Note:** this only applies when Ollama or LibreTranslate is the active service. Google Translate always contacts Google's servers — see the [Security](#-security) table.
 
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, running the tests (`npm test`) and the pull request checklist.
+
 ## 🚨 Troubleshooting
 
 ### "Error: Ollama error: 403 Forbidden"
@@ -185,6 +193,14 @@ Run `ollama pull translategemma` (or whichever model is selected in settings).
 Highlight text in the compose body *before* clicking the Translate button in the popup.
 
 ## 📜 Changelog
+
+### v1.9.3 (fork — jctots)
+- **Privacy policy** — added [PRIVACY.md](PRIVACY.md) and a "what is sent where" section in Preferences, answering the ATN review of 1.9.2
+- **API key fields are masked** — `type="password"` on the Ollama and LibreTranslate key fields
+- **Translate selection** — select text in a message, right-click → *Translate selection*; the result appears in a dismissible panel (Esc or ✕) and the message is untouched
+- **Source language shown** — the translated-subject bar reads "Translated from German via …" when the service reports the language (Google, LibreTranslate; Ollama does not)
+- **Automated tests, CI and contributor docs** — `npm test` (no dependencies) checks syntax, manifest, locales, packaging, network call sites and the translation services; runs on GitHub Actions; see [CONTRIBUTING.md](CONTRIBUTING.md). Six locales were missing the `permissionDenied` string and now have it
+- **Never auto-translate a sender** — a new item in the toolbar button's right-click menu, next to the per-language one; excluded senders are skipped before anything is sent
 
 ### v1.9.2 (fork — jctots)
 - **Disabled by default** — a fresh install has no translation service selected and sends nothing anywhere; a fourth **Disabled** option in Preferences makes this explicit. Installs that never saved a service keep Google Translate on upgrade

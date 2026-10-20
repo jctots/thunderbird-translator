@@ -110,6 +110,7 @@ async function getSettings() {
     libreApiKey: "",
     autoTranslate: false,
     neverTranslateLangs: [],
+    neverTranslateSenders: [],
     ollamaTranslatePrompt: "",
     ollamaDetectPrompt: "",
   });
@@ -164,6 +165,15 @@ messenger.tabs.onRemoved.addListener((tabId) => {
   portMap.delete(tabId);
   detectedLangByTab.delete(tabId);
 });
+
+// Lower-cased address of the displayed message's author ("Name <a@b.c>" or "a@b.c").
+async function getSenderAddress(tabId) {
+  if (tabId == null) return null;
+  const msg = await messenger.messageDisplay.getDisplayedMessage(tabId);
+  const author = msg?.author || "";
+  const m = author.match(/<([^>]+)>/);
+  return ((m ? m[1] : author).trim().toLowerCase()) || null;
+}
 
 // --- Port management ---
 
@@ -251,7 +261,20 @@ messenger.runtime.onConnect.addListener((port) => {
           if (tabId != null && detectedLang && !detectedLangByTab.has(tabId)) {
             detectedLangByTab.set(tabId, detectedLang);
           }
-          port.postMessage({ id: message.id, success: true, translated });
+          port.postMessage({ id: message.id, success: true, translated,
+            detectedLang: (tabId != null && detectedLangByTab.get(tabId)) || detectedLang || null });
+        } catch (e) {
+          port.postMessage({ id: message.id, success: false, error: e.message });
+        }
+        return;
+      }
+
+      // Sender exemption: checked before auto-translate starts, so nothing is sent.
+      if (message.command === "checkSender") {
+        try {
+          const { neverTranslateSenders = [] } = await getSettings();
+          const sender = await getSenderAddress(tabId);
+          port.postMessage({ id: message.id, success: true, exempt: !!sender && neverTranslateSenders.includes(sender) });
         } catch (e) {
           port.postMessage({ id: message.id, success: false, error: e.message });
         }
@@ -650,6 +673,20 @@ browser.menus.create({
 });
 
 browser.menus.create({
+  id: "never-translate-sender-toggle",
+  title: "Never auto-translate this sender",
+  type: "normal",
+  enabled: false,
+  contexts: ["message_display_action"],
+});
+
+browser.menus.create({
+  id: "translate-selection",
+  title: "Translate selection",
+  contexts: ["selection"],
+});
+
+browser.menus.create({
   id: "translate-to-compose",
   title: "Translate to",
   contexts: ["compose_action"],
@@ -668,6 +705,12 @@ for (const lang of LANGUAGES) {
 browser.menus.onShown.addListener(async (info, tab) => {
   const isRead    = info.contexts.includes("message_display_action");
   const isCompose = info.contexts.includes("compose_action");
+  const isSelection = info.contexts.includes("selection");
+  if (isSelection) {
+    // Compose has its own action for selected text; only offer this when reading.
+    await browser.menus.update("translate-selection", { visible: tab?.type !== "messageCompose" });
+    browser.menus.refresh();
+  }
   if (!isRead && !isCompose) return;
 
   const settings = await getSettings();
@@ -730,6 +773,22 @@ browser.menus.onShown.addListener(async (info, tab) => {
     }
   }
 
+  if (isRead) {
+    let sender = null;
+    try { sender = await getSenderAddress(tabId); } catch {}
+    if (!settings.autoTranslate || !sender) {
+      await browser.menus.update("never-translate-sender-toggle", {
+        title: "Never auto-translate this sender", enabled: false,
+      });
+    } else {
+      const excluded = (settings.neverTranslateSenders || []).includes(sender);
+      await browser.menus.update("never-translate-sender-toggle", {
+        title: excluded ? `Always auto-translate ${sender}` : `Never auto-translate ${sender}`,
+        enabled: true,
+      });
+    }
+  }
+
   if (isCompose) {
     const composeLangKey    = COMPOSE_LANG_KEY[settings.service] || "googleComposeLang";
     const activeComposeLang = settings[composeLangKey] || "en";
@@ -760,6 +819,22 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     return;
   }
 
+  if (info.menuItemId === "never-translate-sender-toggle") {
+    const sender = await getSenderAddress(tab?.id ?? null);
+    if (!sender) return;
+    const { neverTranslateSenders = [] } = await messenger.storage.local.get({ neverTranslateSenders: [] });
+    const updated = neverTranslateSenders.includes(sender)
+      ? neverTranslateSenders.filter(a => a !== sender)
+      : [...new Set([...neverTranslateSenders, sender])];
+    await messenger.storage.local.set({ neverTranslateSenders: updated });
+    return;
+  }
+
+  if (info.menuItemId === "translate-selection") {
+    await translateSelection(info.selectionText, tab);
+    return;
+  }
+
   const { service } = await messenger.storage.local.get({ service: DEFAULT_SERVICE });
   if (String(info.menuItemId).startsWith("read-lang-")) {
     const lang    = info.menuItemId.replace("read-lang-", "");
@@ -775,6 +850,32 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     messenger.composeAction.setTitle({ title: `Translate (${lang.toUpperCase()})` });
   }
 });
+
+// --- Translate selection (read mode) ---
+// Shows the result in a dismissible panel; the message itself is left untouched.
+
+async function translateSelection(text, tab) {
+  const tabId = tab?.id ?? null;
+  text = (text || "").trim();
+  if (!text || tabId == null) return;
+  const settings = await getSettings();
+  if (await serviceNeedsSetup(settings)) {
+    await messenger.runtime.openOptionsPage();
+    return;
+  }
+  const port = portMap.get(tabId);
+  if (!port) return;
+  const targetLang = { ollama: settings.ollamaTargetLang, google: settings.googleTargetLang, libretranslate: settings.libreTargetLang }[settings.service] || "en";
+  const SERVICE_LABELS = { ollama: "Ollama", google: "Google Translate", libretranslate: "LibreTranslate" };
+  const serviceLabel = SERVICE_LABELS[settings.service] || settings.service;
+  try {
+    const { translated, detectedLang } = await translateText(text, settings, targetLang, null);
+    port.postMessage({ command: "showSelectionTranslation", original: text, translated,
+      sourceLang: detectedLang, targetLang, serviceLabel });
+  } catch (e) {
+    port.postMessage({ command: "showSelectionTranslation", original: text, error: e.message, serviceLabel });
+  }
+}
 
 // --- messageDisplayAction toggle ---
 

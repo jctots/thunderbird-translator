@@ -26,6 +26,7 @@
   let cachedLang = null;
   let translatedSubject = null;
   let subjectBar = null;
+  let detectedSource = null; // source language reported by the service, if any
 
   // --- Port to background ---
 
@@ -33,6 +34,7 @@
   const pendingRequests        = new Map(); // text translate requests
   const subjectPendingRequests = new Map(); // subject translate requests
   const exemptionPendingRequests = new Map(); // exemption check requests
+  const senderPendingRequests = new Map();    // sender exemption requests
   let nextRequestId = 0;
 
   port.onMessage.addListener(async (message) => {
@@ -52,9 +54,18 @@
       else reject(new Error(message.error));
       return;
     }
+    // Sender exemption response
+    if (message.id != null && senderPendingRequests.has(message.id)) {
+      const { resolve, reject } = senderPendingRequests.get(message.id);
+      senderPendingRequests.delete(message.id);
+      if (message.success) resolve({ exempt: message.exempt });
+      else reject(new Error(message.error));
+      return;
+    }
     // Text translate response
     if (message.id != null && pendingRequests.has(message.id)) {
       const { resolve, reject } = pendingRequests.get(message.id);
+      if (message.detectedLang && !detectedSource) detectedSource = message.detectedLang;
       pendingRequests.delete(message.id);
       if (message.success) resolve(message.translated);
       else reject(new Error(message.error));
@@ -70,6 +81,10 @@
     if (message.command === "doRevert") {
       reloadPage();
       port.postMessage({ command: "revertDone", reqId: message.reqId, isTranslated: false, success: true });
+      return;
+    }
+    if (message.command === "showSelectionTranslation") {
+      showSelectionPanel(message);
       return;
     }
     if (message.command === "getState") {
@@ -91,6 +106,14 @@
       const id = nextRequestId++;
       subjectPendingRequests.set(id, { resolve, reject });
       port.postMessage({ command: "getTranslatedSubject", id });
+    });
+  }
+
+  function sendCheckSenderRequest() {
+    return new Promise((resolve, reject) => {
+      const id = nextRequestId++;
+      senderPendingRequests.set(id, { resolve, reject });
+      port.postMessage({ command: "checkSender", id });
     });
   }
 
@@ -137,7 +160,12 @@
     document.head.appendChild(style);
   }
 
-  function injectSubjectBar({ translated, serviceLabel, serviceUrl }) {
+  function languageName(code) {
+    try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) || code; }
+    catch { return code; }
+  }
+
+  function injectSubjectBar({ translated, serviceLabel, serviceUrl, sourceLang }) {
     removeSubjectBar();
     createSubjectBarStyle();
     const bar = document.createElement("div");
@@ -145,9 +173,10 @@
 
     const infoLine = document.createElement("div");
     infoLine.id = "__translator_service_info__";
+    const from = sourceLang ? ` from ${languageName(sourceLang)}` : "";
     infoLine.textContent = serviceUrl
-      ? `🌐 Translated via ${serviceLabel} (${serviceUrl})`
-      : `🌐 Translated via ${serviceLabel}`;
+      ? `🌐 Translated${from} via ${serviceLabel} (${serviceUrl})`
+      : `🌐 Translated${from} via ${serviceLabel}`;
 
     const subjectLine = document.createElement("div");
     subjectLine.id = "__translator_subject_text__";
@@ -171,6 +200,62 @@
     document.body.style.removeProperty("margin-top");
     subjectBar = null;
   }
+
+  // --- Selection panel ---
+
+  function showSelectionPanel({ original, translated, error, sourceLang, targetLang, serviceLabel }) {
+    removeSelectionPanel();
+    if (!document.getElementById("__translator_selection_style__")) {
+      const style = document.createElement("style");
+      style.id = "__translator_selection_style__";
+      style.textContent = `
+        #__translator_selection_panel__ {
+          position: fixed; left: 0; right: 0; bottom: 0; z-index: 10000;
+          max-height: 45%; overflow: auto; box-sizing: border-box;
+          padding: 8px 12px 10px; background: Canvas; color: CanvasText;
+          border-top: 2px solid GrayText; color-scheme: light dark;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 14px;
+        }
+        #__translator_selection_panel__ .tt-head { font-size: 11px; color: GrayText; margin-bottom: 4px; }
+        #__translator_selection_panel__ .tt-body { white-space: pre-wrap; }
+        #__translator_selection_panel__ .tt-err { color: #c00; }
+        #__translator_selection_panel__ button {
+          position: absolute; top: 4px; right: 8px; border: 0; background: none;
+          color: CanvasText; font-size: 16px; cursor: pointer;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    const panel = document.createElement("div");
+    panel.id = "__translator_selection_panel__";
+
+    const head = document.createElement("div");
+    head.className = "tt-head";
+    const from = sourceLang ? ` from ${languageName(sourceLang)}` : "";
+    const to = targetLang ? ` to ${languageName(targetLang)}` : "";
+    head.textContent = `🌐 Selection translated${from}${to} via ${serviceLabel}`;
+
+    const body = document.createElement("div");
+    body.className = "tt-body" + (error ? " tt-err" : "");
+    body.textContent = error ? `Translation failed: ${error}` : translated;
+
+    const close = document.createElement("button");
+    close.textContent = "✕";
+    close.title = "Close";
+    close.addEventListener("click", removeSelectionPanel);
+
+    panel.append(close, head, body);
+    document.body.appendChild(panel);
+  }
+
+  function removeSelectionPanel() {
+    document.getElementById("__translator_selection_panel__")?.remove();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") removeSelectionPanel();
+  });
 
   // --- DOM Text Extraction ---
 
@@ -330,6 +415,7 @@
 
       await bodyPromise;
       translatedSubject = await subjectPromise;
+      if (translatedSubject) translatedSubject.sourceLang = detectedSource;
 
       isTranslated = true;
       translationCached = true;
@@ -363,6 +449,13 @@
   // Auto-translate on load if setting is enabled
   browser.storage.local.get({ autoTranslate: false, service: "disabled" }).then(async (s) => {
     if (!s.autoTranslate || s.service === "disabled") return;
+
+    try {
+      const { exempt } = await sendCheckSenderRequest();
+      if (exempt) return;
+    } catch (e) {
+      console.warn("[Translator] Sender check failed, continuing:", e.message);
+    }
 
     port.postMessage({ command: "setBadge" });
     const result = await startTranslation();

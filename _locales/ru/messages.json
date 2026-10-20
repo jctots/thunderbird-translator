@@ -138,5 +138,15 @@
   "subjectLabel": {
     "message": "Тема:",
     "description": "Метка перед переведённой темой письма"
+  },
+  "permissionDenied": {
+    "message": "Доступ к $ORIGIN$ не предоставлен. Без него перевод не может обратиться к этому серверу.",
+    "description": "Shown when the user declines the host permission request",
+    "placeholders": {
+      "origin": {
+        "content": "$1",
+        "example": "http://localhost/*"
+      }
+    }
   }
 }

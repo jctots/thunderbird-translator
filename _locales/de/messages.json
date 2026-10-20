@@ -138,5 +138,15 @@
   "subjectLabel": {
     "message": "Betreff:",
     "description": "Bezeichnung vor dem übersetzten E-Mail-Betreff"
+  },
+  "permissionDenied": {
+    "message": "Zugriff auf $ORIGIN$ wurde nicht gewährt. Ohne ihn kann die Übersetzung diesen Server nicht erreichen.",
+    "description": "Shown when the user declines the host permission request",
+    "placeholders": {
+      "origin": {
+        "content": "$1",
+        "example": "http://localhost/*"
+      }
+    }
   }
 }
