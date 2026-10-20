@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions about setting up Ollama or LibreTranslate
+    url: https://github.com/jctots/thunderbird-translator/discussions
+    about: Setup help for the backend services is better handled in Discussions than as a bug.

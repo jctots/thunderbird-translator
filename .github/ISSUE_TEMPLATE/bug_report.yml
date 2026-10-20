@@ -1,0 +1,43 @@
+name: Bug report
+description: Something does not work as the README says it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not paste email content, API keys or private server addresses.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Add-on version, Thunderbird version, OS
+      placeholder: "1.9.3 / Thunderbird 140.2 / Fedora 44"
+    validations: { required: true }
+  - type: dropdown
+    id: service
+    attributes:
+      label: Translation service
+      options: [Ollama, LibreTranslate (self-hosted), LibreTranslate (public), Google Translate, Disabled]
+    validations: { required: true }
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      options: [Reading a message, Composing, Preferences page, Auto-translate, Install / upgrade]
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. actual
+    validations: { required: true }
+  - type: textarea
+    id: log
+    attributes:
+      label: Console output
+      description: "Tools → Developer Tools → Debug Add-ons → Inspect → Console. Redact anything private."
+      render: text

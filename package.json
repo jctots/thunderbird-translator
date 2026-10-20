@@ -1,0 +1,12 @@
+{
+  "name": "thunderbird-translator",
+  "version": "1.9.3",
+  "private": true,
+  "description": "Privacy Translator for Thunderbird — dev tooling only; the add-on itself has no dependencies",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "build": "node scripts/build-xpi.js"
+  },
+  "engines": { "node": ">=22" }
+}
